@@ -1,0 +1,32 @@
+# 复制为 apps/worker/wrangler.toml 后，替换为你自己的 Cloudflare 资源。
+# 注意：这个 example 可以提交；真实 wrangler.toml 若包含生产资源 ID、域名或管理员 ID，不要提交到公开仓库。
+name = "your-flowmemo-api"
+main = "src/index.ts"
+compatibility_date = "2026-06-27"
+
+[vars]
+APP_ENV = "production"
+# 多个前端来源用英文逗号分隔，例如 "https://app.example.com,https://www.example.com"。
+WEB_ORIGIN = "https://your-web-domain.example.com"
+COOKIE_DOMAIN = ""
+# 可选：公开图片 CDN 域名。不配置时会使用 Worker 的 /api/uploads 代理地址。
+PUBLIC_IMAGE_BASE_URL = ""
+# 可选：管理员用户 ID allowlist，多个 UUID 用英文逗号分隔。
+ADMIN_USER_IDS = ""
+
+[[d1_databases]]
+binding = "DB"
+database_name = "your_flowmemo_database"
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "00000000000000000000000000000000"
+
+[[kv_namespaces]]
+binding = "RATE_LIMIT"
+id = "00000000000000000000000000000000"
+
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "your-image-bucket"

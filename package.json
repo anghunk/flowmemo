@@ -1,0 +1,19 @@
+{
+  "name": "flowmemo-cloudflare",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @flowmemo/web --filter @flowmemo/worker dev",
+    "dev:web": "pnpm --filter @flowmemo/web dev",
+    "dev:worker": "pnpm --filter @flowmemo/worker dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "deploy:web": "pnpm --filter @flowmemo/web build",
+    "deploy:worker": "pnpm --filter @flowmemo/worker deploy"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

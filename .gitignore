@@ -1,0 +1,21 @@
+node_modules
+dist
+.wrangler
+.codex-logs
+.DS_Store
+*.local
+
+# 本地环境变量和私有部署配置不要提交；只提交 *.example 模板。
+.env
+.env.*
+!.env.example
+!.env.*.example
+apps/web/.env.dev
+apps/web/.env.production
+apps/worker/.dev.vars
+apps/worker/.dev.vars.*
+apps/worker/wrangler.toml
+!apps/worker/.dev.vars.example
+apps/mobile-rn/.env
+apps/mobile-rn/.env.*
+!apps/mobile-rn/.env.example
