@@ -2,6 +2,8 @@
 
 一个前后端分离的轻量 memo 网页应用。
 
+<img width="1179" height="707" alt="image" src="https://github.com/user-attachments/assets/d1468cac-e293-4cca-8f71-57213c893fa3" />
+
 ## 项目结构
 
 ```txt
