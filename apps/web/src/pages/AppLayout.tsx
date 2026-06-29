@@ -353,10 +353,12 @@ function AppContent({ initialView }: AppContentProps) {
 	const location = useLocation();
 	const navigate = useNavigate();
 	const appMainRef = useRef<HTMLElement>(null);
+	const mobileSearchInputRef = useRef<HTMLInputElement>(null);
 	const routeState = useMemo(() => getRouteViewState(location.pathname, initialView), [initialView, location.pathname]);
 	const { view, tag } = routeState;
 	const [q, setQ] = useState('');
 	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 	const [randomMemo, setRandomMemo] = useState<Memo | null>(null);
 	const [randomMemoLoading, setRandomMemoLoading] = useState(false);
 	const [randomMemoError, setRandomMemoError] = useState<string | null>(null);
@@ -400,6 +402,18 @@ function AppContent({ initialView }: AppContentProps) {
 	useLayoutEffect(() => {
 		appMainRef.current?.scrollTo({ top: 0, left: 0 });
 	}, [location.pathname, location.search]);
+
+	useEffect(() => {
+		if (mobileSearchOpen) {
+			mobileSearchInputRef.current?.focus();
+		}
+	}, [mobileSearchOpen]);
+
+	useEffect(() => {
+		if (view === 'random') {
+			setMobileSearchOpen(false);
+		}
+	}, [view]);
 
 	const query: MemoListQuery = {
 		view:
@@ -544,7 +558,6 @@ function AppContent({ initialView }: AppContentProps) {
 		{
 			id: 'export',
 			label: exporting ? '导出中' : '导出',
-			description: 'Markdown 文件',
 			icon: <Download size={17} />,
 			disabled: exporting,
 			onSelect: handleExportMemos,
@@ -1060,7 +1073,7 @@ function AppContent({ initialView }: AppContentProps) {
 						type='button'
 						variant='ghost'
 						size='icon'
-						className='lg:hidden'
+						className='min-[800px]:hidden'
 						aria-controls='mobile-app-sidebar'
 						aria-expanded={sidebarOpen}
 						onClick={openMobileSidebar}
@@ -1119,18 +1132,33 @@ function AppContent({ initialView }: AppContentProps) {
 							</Button>
 						)}
 						{view !== 'random' && (
-							<div className='search-shell hidden sm:block'>
-								<Search
-									className='pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8f8f8f]'
-									size={17}
-								/>
-								<Input
-									className='search-input'
-									value={q}
-									onChange={(event) => setQ(event.target.value)}
-									placeholder='⌘ + K'
-								/>
-							</div>
+							<>
+								<Button
+									type='button'
+									variant='ghost'
+									size='icon'
+									className='mobile-search-toggle sm:hidden'
+									data-active={mobileSearchOpen || q ? 'true' : undefined}
+									aria-label={mobileSearchOpen ? '收起搜索' : '搜索 memo'}
+									aria-controls='mobile-memo-search'
+									aria-expanded={mobileSearchOpen}
+									onClick={() => setMobileSearchOpen((current) => !current)}
+								>
+									{mobileSearchOpen ? <X size={18} /> : <Search size={18} />}
+								</Button>
+								<div className='search-shell hidden sm:block'>
+									<Search
+										className='pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8f8f8f]'
+										size={17}
+									/>
+									<Input
+										className='search-input'
+										value={q}
+										onChange={(event) => setQ(event.target.value)}
+										placeholder='⌘ + K'
+									/>
+								</div>
+							</>
 						)}
 					</div>
 				</header>
@@ -1142,13 +1170,32 @@ function AppContent({ initialView }: AppContentProps) {
 					transition={{ duration: 0.16 }}
 					className='mx-auto w-full max-w-[666[x]] px-4 pt-2 pb-10 sm:px-0'
 				>
-					{view !== 'random' && (
-						<div className='mb-4 sm:hidden'>
+					{view !== 'random' && mobileSearchOpen && (
+						<div
+							id='mobile-memo-search'
+							className='mobile-search-panel sm:hidden'
+						>
+							<Search
+								className='pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[#8f8f8f]'
+								size={17}
+							/>
 							<Input
+								ref={mobileSearchInputRef}
+								className='mobile-search-input'
 								value={q}
 								onChange={(event) => setQ(event.target.value)}
 								placeholder='搜索 memo'
 							/>
+							{q && (
+								<button
+									type='button'
+									className='mobile-search-clear'
+									aria-label='清空搜索'
+									onClick={() => setQ('')}
+								>
+									<X size={15} />
+								</button>
+							)}
 						</div>
 					)}
 					{view === 'settings' ? (
