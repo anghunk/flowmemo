@@ -3485,9 +3485,58 @@ textarea {
   vertical-align: middle;
 }
 
+.memo-content-shell {
+  position: relative;
+}
+
 .memo-content {
   display: grid;
   gap: 12px;
+}
+
+.memo-content.is-collapsed {
+  max-height: 360px;
+  overflow: hidden;
+}
+
+.memo-expand-mask {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  height: 88px;
+  align-items: flex-end;
+  justify-content: center;
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.82) 48%, rgba(255, 255, 255, 0.96));
+  padding-bottom: 2px;
+  pointer-events: none;
+}
+
+.memo-expand-button {
+  display: inline-flex;
+  height: 50px;
+  width: 100%;
+  transform: translateY(10px);
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 7px;
+  color: #ccc;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1;
+  pointer-events: auto;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+
+.memo-expand-button:active {
+  transform: scale(0.97) translateY(10px);
 }
 
 .memo-attachments {

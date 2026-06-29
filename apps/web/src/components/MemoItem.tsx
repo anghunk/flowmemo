@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   Check,
+  ChevronDown,
   Copy,
   ExternalLink,
   Globe2,
@@ -49,6 +50,7 @@ const protectedImageObjectUrls = new Map<string, string>();
 const protectedImageRequests = new Map<string, Promise<string>>();
 const PROTECTED_IMAGE_CACHE_LIMIT = 120;
 const MARKDOWN_IMAGE_PATTERN = /!\[([^\]]*)\]\(([^)]+)\)/g;
+const MEMO_COLLAPSED_CONTENT_HEIGHT = 360;
 
 /**
  * 从 memo Markdown 中拆出图片，让展示态正文和图片附件分区渲染。
@@ -223,6 +225,8 @@ export function MemoItem({
 }: MemoItemProps) {
   const [editing, setEditing] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [overflowing, setOverflowing] = useState(false);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<MemoEditorHandle>(null);
@@ -346,6 +350,30 @@ export function MemoItem({
     };
   }, [editing, memo.content, viewerId]);
 
+  useEffect(() => {
+    setExpanded(false);
+  }, [memo.content]);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root || editing) {
+      setOverflowing(false);
+      return;
+    }
+
+    const updateOverflowing = () => {
+      setOverflowing(root.scrollHeight > MEMO_COLLAPSED_CONTENT_HEIGHT + 1);
+    };
+
+    updateOverflowing();
+    const resizeObserver = new ResizeObserver(updateOverflowing);
+    resizeObserver.observe(root);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [editing, memo.content, renderedContent, displayContent.images.length]);
+
   /**
    * 保存编辑后的内容。
    */
@@ -397,6 +425,13 @@ export function MemoItem({
 
     event.preventDefault();
     onTagSelect?.(tagName);
+  }
+
+  /**
+   * 展开被高度限制的 memo 内容。
+   */
+  function expandMemoContent() {
+    setExpanded(true);
   }
 
   /**
@@ -571,30 +606,44 @@ export function MemoItem({
           <time className="memo-time" dateTime={memo.createdAt}>
             {formatTime(memo.createdAt)}
           </time>
-          <div ref={contentRef} className="memo-content" onClick={handleContentClick}>
-            {renderedContent && (
-              <div
-                className="memo-markdown"
-                dangerouslySetInnerHTML={{
-                  __html: renderedContent
-                }}
-              />
-            )}
-            {displayContent.images.length > 0 && (
-              <div className="memo-attachments" aria-label="笔记图片">
-                {displayContent.images.map((image) => (
-                  <div key={image.id} className="memo-attachment">
-                    <button
-                      type="button"
-                      className="memo-attachment-preview"
-                      aria-label="预览图片"
-                      title="预览图片"
-                      onClick={(event) => openAttachmentPreview(event, image)}
-                    >
-                      <img src={image.url} alt={image.alt} />
-                    </button>
-                  </div>
-                ))}
+          <div className="memo-content-shell">
+            <div
+              ref={contentRef}
+              className={cn("memo-content", overflowing && !expanded && "is-collapsed")}
+              onClick={handleContentClick}
+            >
+              {renderedContent && (
+                <div
+                  className="memo-markdown"
+                  dangerouslySetInnerHTML={{
+                    __html: renderedContent
+                  }}
+                />
+              )}
+              {displayContent.images.length > 0 && (
+                <div className="memo-attachments" aria-label="笔记图片">
+                  {displayContent.images.map((image) => (
+                    <div key={image.id} className="memo-attachment">
+                      <button
+                        type="button"
+                        className="memo-attachment-preview"
+                        aria-label="预览图片"
+                        title="预览图片"
+                        onClick={(event) => openAttachmentPreview(event, image)}
+                      >
+                        <img src={image.url} alt={image.alt} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {overflowing && !expanded && (
+              <div className="memo-expand-mask">
+                <button type="button" className="memo-expand-button" onClick={expandMemoContent}>
+                  <ChevronDown size={15} />
+                  展开
+                </button>
               </div>
             )}
           </div>
