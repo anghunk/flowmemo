@@ -11,30 +11,6 @@ apps/mobile-rn Expo / React Native 移动端
 packages/shared 共享类型和常量
 ```
 
-## 本地开发
-
-```bash
-pnpm install
-pnpm dev
-```
-
-前端默认运行在 `http://localhost:5173`，Worker API 默认运行在 `http://localhost:8787`。
-
-本地开发前可以从模板复制环境变量文件：
-
-```bash
-cp apps/web/.env.dev.example apps/web/.env.dev
-cp apps/worker/.dev.vars.example apps/worker/.dev.vars
-cp apps/mobile-rn/.env.example apps/mobile-rn/.env
-```
-
-真实域名、Cloudflare 资源 ID、管理员账号密码和联系邮箱不要提交到仓库。
-Cloudflare Pages 的生产 Vite 变量在网页控制台手动填写；Worker 部署变量写在本地 `apps/worker/wrangler.toml`，但只提交脱敏的 example。
-
-`apps/worker/wrangler.toml.example` 是可提交的脱敏模板；真实 `apps/worker/wrangler.toml` 用于部署，里面会包含 Worker 变量和 Cloudflare 资源 ID，不要提交到公开仓库。
-
-注册默认是开放注册，不需要邀请码。部署完成后，管理员可以在后台切换为“邀请码模式”，切换后新用户注册必须填写有效邀请码。
-
 ## Cloudflare 资源
 
 - D1：业务数据
