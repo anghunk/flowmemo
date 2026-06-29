@@ -84,6 +84,9 @@ bucket_name = "你的-R2-bucket"
 `PUBLIC_IMAGE_BASE_URL` 可留空，留空时图片会走 Worker 的 `/api/uploads` 代理地址。
 `ADMIN_USER_IDS` 可先留空，首个管理员创建方式见后文。
 
+<img width="748" height="498" alt="image" src="https://github.com/user-attachments/assets/9346d3b2-7d6d-40af-b56e-c63048b157a8" />
+
+
 3. 执行类型检查：
 
 ```bash
@@ -129,6 +132,8 @@ curl https://你的-api-域名/api/health
 VITE_API_BASE_URL=https://你的-api-域名
 VITE_SUBSCRIPTION_CONTACT_EMAIL=你的联系邮箱
 ```
+
+<img width="809" height="240" alt="image" src="https://github.com/user-attachments/assets/149205d2-3be7-40fc-a63e-174a2fa6486b" />
 
 如果需要预览分支也能访问真实 API，也在 `Preview` 环境填同样的变量。
 `VITE_API_BASE_URL` 是前端请求 Worker API 的地址；前后端不同域时必须填写，并确保 Worker 的 `WEB_ORIGIN` 包含 Pages 域名。
