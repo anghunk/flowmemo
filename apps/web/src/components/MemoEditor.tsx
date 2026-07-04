@@ -40,6 +40,7 @@ type MarkdownTool = {
 
 type MemoEditorProps = {
   initialValue?: string;
+  prefillValue?: string;
   canUploadImages?: boolean;
   autoFocus?: boolean;
   placeholder?: string;
@@ -89,6 +90,7 @@ function splitMarkdownImages(value: string): { text: string; images: EditorImage
 export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function MemoEditor(
   {
     initialValue = "",
+    prefillValue = "",
     canUploadImages = false,
     autoFocus = false,
     placeholder = "现在想到什么？支持 Markdown 和 #标签",
@@ -100,7 +102,10 @@ export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function
   ref
 ) {
   const initialContent = useRef(splitMarkdownImages(initialValue));
-  const [content, setContent] = useState(initialContent.current.text);
+  const shouldUsePrefill = !initialContent.current.text && initialContent.current.images.length === 0;
+  const initialText = shouldUsePrefill ? prefillValue : initialContent.current.text;
+  const autoPrefillRef = useRef(shouldUsePrefill ? prefillValue : "");
+  const [content, setContent] = useState(initialText);
   const [focused, setFocused] = useState(false);
   const [forceExpanded, setForceExpanded] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
@@ -124,17 +129,35 @@ export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function
         return buildSubmitContent();
       },
       clear() {
-        setContent("");
+        setContent(prefillValue);
+        autoPrefillRef.current = prefillValue;
         clearImages();
         setForceExpanded(false);
       }
     }),
-    [content, images]
+    [content, images, prefillValue]
   );
 
   useEffect(() => {
     imagesRef.current = images;
   }, [images]);
+
+  /**
+   * 在草稿为空或仍是上一次自动填充值时，同步新的默认标签。
+   */
+  useEffect(() => {
+    setContent((current) => {
+      const previousPrefill = autoPrefillRef.current;
+      autoPrefillRef.current = prefillValue;
+      if (!prefillValue) {
+        return previousPrefill && current === previousPrefill ? "" : current;
+      }
+      if (!current.trim() || (previousPrefill && current === previousPrefill)) {
+        return prefillValue;
+      }
+      return current;
+    });
+  }, [prefillValue]);
 
   useEffect(() => {
     imagesRef.current.forEach((image) => {

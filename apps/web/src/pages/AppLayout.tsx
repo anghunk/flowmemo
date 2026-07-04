@@ -1262,7 +1262,7 @@ function AppContent({ initialView }: AppContentProps) {
 								</div>
 							)}
 							{view !== 'archive' && !selectionMode && (
-								<MemoComposer canUploadImages={userData?.user.plan === 'member'} />
+								<MemoComposer canUploadImages={userData?.user.plan === 'member'} defaultTag={tag} />
 							)}
 							<MemoList
 								memos={visibleMemos}

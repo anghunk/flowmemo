@@ -968,7 +968,7 @@ textarea {
 
 .composer {
   position: relative;
-  margin-bottom: 12px;
+  margin-bottom: 2px;
   box-shadow: none;
 }
 
@@ -1274,6 +1274,7 @@ textarea {
   justify-content: space-between;
   gap: 12px;
   margin-top: 10px;
+  padding-bottom: 10px;
 }
 
 .composer-toolbar {
@@ -3920,6 +3921,26 @@ a[href^="https://"]::after {
 
   .app-topbar {
     padding: 0;
+  }
+}
+
+@media (min-width: 800px) {
+  .composer,
+  .selection-toolbar {
+    position: sticky;
+    top: 60px;
+    z-index: 15;
+  }
+
+  .composer {
+    margin-top: -8px;
+    padding-top: 8px;
+    background: #f7f7f7;
+  }
+
+  .selection-toolbar {
+    margin-top: -8px;
+    box-shadow: 0 8px 18px rgba(20, 31, 26, 0.06);
   }
 }
 

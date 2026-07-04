@@ -7,6 +7,7 @@ import { useCreateMemo } from "../hooks/useMemos";
 
 type MemoComposerProps = {
   canUploadImages?: boolean;
+  defaultTag?: string;
 };
 
 let hasAutoFocusedComposer = false;
@@ -14,10 +15,11 @@ let hasAutoFocusedComposer = false;
 /**
  * 快速 memo 创建编辑器。
  */
-export function MemoComposer({ canUploadImages = false }: MemoComposerProps) {
+export function MemoComposer({ canUploadImages = false, defaultTag }: MemoComposerProps) {
   const editorRef = useRef<MemoEditorHandle>(null);
   const shouldAutoFocus = !hasAutoFocusedComposer;
   const createMemo = useCreateMemo();
+  const prefillValue = defaultTag ? `#${defaultTag} ` : "";
 
   useEffect(() => {
     if (shouldAutoFocus) {
@@ -46,6 +48,7 @@ export function MemoComposer({ canUploadImages = false }: MemoComposerProps) {
       ref={editorRef}
       canUploadImages={canUploadImages}
       autoFocus={shouldAutoFocus}
+      prefillValue={prefillValue}
       onSubmit={submit}
       footerActions={({ canSubmit }) => (
         <Button type="button" size="sm" onClick={submit} disabled={!canSubmit || createMemo.isPending}>
