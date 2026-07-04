@@ -14,7 +14,11 @@ import type {
   AdminUser,
   AdminUserListResponse,
   AiEntitlementResponse,
+  ApiTokenListResponse,
+  CreateApiTokenRequest,
+  CreateApiTokenResponse,
   Memo,
+  MemoListQuery,
   UploadImageResponse,
   UpdateInviteRegistrationRequest,
   UpdateUserMembershipRequest,
@@ -24,7 +28,15 @@ import type {
 import type { Context, Next } from "hono";
 import { Hono } from "hono";
 import type { AppEnv, DbInviteCode, DbUser } from "./types";
-import { requireAuth } from "./middleware/auth";
+import { requireApiAuth, requireAuth } from "./middleware/auth";
+import {
+  createApiToken,
+  listApiTokens,
+  normalizeApiTokenName,
+  normalizeApiTokenScope,
+  readApiTokenUser,
+  revokeApiToken
+} from "./services/apiTokens";
 import { ensureDevelopmentAdmin } from "./services/development";
 import { createSession, deleteSession, readSession } from "./services/session";
 import {
@@ -269,6 +281,52 @@ function readBearerToken(value: string | undefined): string | undefined {
 }
 
 /**
+ * 读取可选数字查询参数，非法值交给服务层按默认值处理。
+ */
+function readNumberQuery(c: Context<AppEnv>, name: string): number | undefined {
+  const value = c.req.query(name);
+  if (value === undefined || value.trim() === "") {
+    return undefined;
+  }
+
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
+/**
+ * 读取标签查询参数，支持 tags=a,b 和重复 tags=a&tags=b。
+ */
+function readTagsQuery(c: Context<AppEnv>): string[] | undefined {
+  const url = new URL(c.req.url);
+  const values = [
+    ...url.searchParams.getAll("tags"),
+    ...url.searchParams.getAll("labels")
+  ]
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  return values.length > 0 ? values : undefined;
+}
+
+/**
+ * 读取 memo 列表 API 查询参数。
+ */
+function readMemoListQuery(c: Context<AppEnv>): MemoListQuery {
+  return {
+    view: c.req.query("view") as MemoListQuery["view"],
+    tag: c.req.query("tag") ?? c.req.query("label"),
+    tags: readTagsQuery(c),
+    q: c.req.query("q"),
+    date: c.req.query("date"),
+    cursor: c.req.query("cursor"),
+    limit: readNumberQuery(c, "limit"),
+    page: readNumberQuery(c, "page"),
+    pageSize: readNumberQuery(c, "pageSize") ?? readNumberQuery(c, "page_size")
+  };
+}
+
+/**
  * 尝试读取当前登录用户，未登录时返回 null。
  */
 async function readOptionalUser(c: Context<AppEnv>): Promise<{ id: string; account: string } | null> {
@@ -278,14 +336,15 @@ async function readOptionalUser(c: Context<AppEnv>): Promise<{ id: string; accou
   }
 
   const session = await readSession(c, token);
-  if (!session) {
-    return null;
+  if (session) {
+    return {
+      id: session.userId,
+      account: session.account
+    };
   }
 
-  return {
-    id: session.userId,
-    account: session.account
-  };
+  const apiAuth = await readApiTokenUser(c.env.DB, token);
+  return apiAuth?.user ?? null;
 }
 
 /**
@@ -620,6 +679,36 @@ app.get("/api/ai/entitlement", requireAuth, async (c) => {
   return c.json(getAiEntitlement(user));
 });
 
+app.get("/api/api-tokens", requireAuth, async (c) => {
+  const response: ApiTokenListResponse = {
+    tokens: await listApiTokens(c.env.DB, c.get("user").id)
+  };
+  return c.json(response);
+});
+
+app.post("/api/api-tokens", requireAuth, async (c) => {
+  const body = await readJson<CreateApiTokenRequest>(c);
+  const name = normalizeApiTokenName(body?.name);
+  const tokenScope = normalizeApiTokenScope(body);
+  if (name.length > 64) {
+    return jsonError(c, "API Token 名称不能超过 64 个字符");
+  }
+  if (tokenScope.scope === "tags" && tokenScope.tags.length === 0) {
+    return jsonError(c, "请选择至少一个可读标签");
+  }
+
+  const response: CreateApiTokenResponse = await createApiToken(c.env.DB, c.get("user").id, name, tokenScope);
+  return c.json(response, 201);
+});
+
+app.delete("/api/api-tokens/:id", requireAuth, async (c) => {
+  const revoked = await revokeApiToken(c.env.DB, c.get("user").id, c.req.param("id"));
+  if (!revoked) {
+    return jsonError(c, "API Token 不存在", 404);
+  }
+  return c.json({ ok: true });
+});
+
 app.get("/api/admin/users", requireAuth, requireAdmin, async (c) => {
   const q = c.req.query("q")?.trim();
   const cursor = c.req.query("cursor");
@@ -799,18 +888,29 @@ app.post("/api/admin/invites", requireAuth, requireAdmin, async (c) => {
   return c.json({ code: serializeInviteCode(created) }, 201);
 });
 
-app.get("/api/memos", requireAuth, async (c) => {
+/**
+ * 查询当前用户 memo，供前端和外部 API 调用复用。
+ */
+async function handleListMemos(c: Context<AppEnv>) {
   const user = c.get("user");
-  const memos = await listMemos(c.env.DB, user.id, {
-    view: c.req.query("view"),
-    tag: c.req.query("tag"),
-    q: c.req.query("q"),
-    date: c.req.query("date"),
-    cursor: c.req.query("cursor"),
-    limit: Number(c.req.query("limit") ?? 30)
-  });
+  const tokenScope = c.get("apiTokenScope");
+  const memos = await listMemos(
+    c.env.DB,
+    user.id,
+    readMemoListQuery(c),
+    tokenScope?.scope === "tags"
+      ? {
+          restrictToReadableTags: true,
+          readableTags: tokenScope.tags
+        }
+      : undefined
+  );
   return c.json(memos);
-});
+}
+
+app.get("/api/memos", requireAuth, handleListMemos);
+
+app.get("/api/v1/memos", requireApiAuth, handleListMemos);
 
 app.post("/api/memos", requireAuth, async (c) => {
   const body = await readJson<{ content?: string }>(c);

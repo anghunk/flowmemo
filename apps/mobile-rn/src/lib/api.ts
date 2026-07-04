@@ -16,6 +16,7 @@ const DEFAULT_WEB_BASE_URL = "http://localhost:5173";
 
 export const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL;
 export const WEB_BASE_URL = process.env.EXPO_PUBLIC_WEB_BASE_URL ?? DEFAULT_WEB_BASE_URL;
+type QueryValue = string | number | string[] | number[] | undefined | null;
 
 export class ApiError extends Error {
   status: number;
@@ -56,10 +57,16 @@ async function readSessionToken(): Promise<string | null> {
 /**
  * 构造带查询参数的 API URL。
  */
-function buildUrl(path: string, query?: Record<string, string | number | undefined | null>): string {
+function buildUrl(path: string, query?: Record<string, QueryValue>): string {
   const url = new URL(path, API_BASE_URL);
   for (const [key, value] of Object.entries(query ?? {})) {
-    if (value !== undefined && value !== null && value !== "") {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== "") {
+          url.searchParams.append(key, String(item));
+        }
+      }
+    } else if (value !== undefined && value !== null && value !== "") {
       url.searchParams.set(key, String(value));
     }
   }
@@ -72,7 +79,7 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
 async function request<T>(
   path: string,
   options: RequestInit = {},
-  query?: Record<string, string | number | undefined>
+  query?: Record<string, QueryValue>
 ): Promise<T> {
   const sessionToken = await readSessionToken();
   const response = await fetch(buildUrl(path, query), {
@@ -130,7 +137,7 @@ export const api = {
   },
 
   listMemos(query: MemoListQuery) {
-    return request<MemoListResponse>("/api/memos", {}, query as Record<string, string | number | undefined>);
+    return request<MemoListResponse>("/api/memos", {}, query as Record<string, QueryValue>);
   },
 
   createMemo(content: string) {

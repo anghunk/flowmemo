@@ -156,20 +156,52 @@ export type UserPreferences = {
 export type MemoListQuery = {
   view?: "all" | "pinned" | "archive";
   tag?: string;
+  tags?: string[];
   q?: string;
   date?: string;
   cursor?: string;
   limit?: number;
+  page?: number;
+  pageSize?: number;
 };
 
 export type MemoListResponse = {
   memos: Memo[];
   nextCursor: string | null;
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  totalPages?: number;
 };
 
 export type DeleteArchivedMemosResponse = {
   ok: true;
   deleted: number;
+};
+
+export type ApiToken = {
+  id: string;
+  name: string;
+  prefix: string;
+  scope: "all" | "tags";
+  tags: string[];
+  lastUsedAt: string | null;
+  createdAt: string;
+};
+
+export type ApiTokenListResponse = {
+  tokens: ApiToken[];
+};
+
+export type CreateApiTokenRequest = {
+  name?: string;
+  scope?: "all" | "tags";
+  tags?: string[];
+};
+
+export type CreateApiTokenResponse = {
+  token: string;
+  apiToken: ApiToken;
 };
 
 export type UploadedImage = {

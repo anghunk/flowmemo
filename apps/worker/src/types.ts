@@ -17,6 +17,10 @@ export type Variables = {
     id: string;
     account: string;
   };
+  apiTokenScope?: {
+    scope: "all" | "tags";
+    tags: string[];
+  };
 };
 
 export type AppEnv = {
@@ -74,5 +78,18 @@ export type DbInviteCode = {
   created_by_user_id: string;
   used_by_user_id: string | null;
   used_at: string | null;
+  created_at: string;
+};
+
+export type DbApiToken = {
+  id: string;
+  user_id: string;
+  name: string;
+  token_hash: string;
+  token_prefix: string;
+  scope: string;
+  allowed_tags_json: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
   created_at: string;
 };

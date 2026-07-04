@@ -6,6 +6,7 @@ import {
 	ArrowDownNarrowWide,
 	ArrowUpNarrowWide,
 	Bot,
+	Braces,
 	Check,
 	ChevronDown,
 	ChevronRight,
@@ -32,13 +33,14 @@ import {
 	ShieldCheck,
 	Sparkles,
 	Shuffle,
+	Terminal,
 	Trash2,
 	UserRound,
 	X,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import type { AdminInviteCode, AdminUser, MemoListQuery, UserPlan } from '@flowmemo/shared';
+import type { AdminInviteCode, AdminUser, ApiToken, MemoListQuery, UserPlan } from '@flowmemo/shared';
 import type { Memo, Tag } from '@flowmemo/shared';
 import { toast } from 'sonner';
 import { ProtectedRoute } from '../components/ProtectedRoute';
@@ -69,7 +71,7 @@ import {
 	useUpdateMemo,
 	useUpdateTagIcon,
 } from '../hooks/useMemos';
-import { api, ApiError } from '../lib/api';
+import { api, API_BASE_URL, ApiError } from '../lib/api';
 import { cn } from '../lib/cn';
 
 type ViewMode =
@@ -86,6 +88,8 @@ type ViewMode =
 type SortMode = 'created-desc' | 'created-asc' | 'updated-desc';
 
 const SUBSCRIPTION_CONTACT_EMAIL = import.meta.env.VITE_SUBSCRIPTION_CONTACT_EMAIL?.trim() ?? '';
+const API_TOKEN_TAG_SEPARATOR_PATTERN = /[\s,，、;；]+/u;
+const API_TOKEN_SCOPE_STORAGE_PREFIX = 'flowmemo_api_token_scope';
 
 const TagEmojiPicker = lazy(() =>
 	import('../components/TagEmojiPicker').then((module) => ({ default: module.TagEmojiPicker })),
@@ -2218,12 +2222,366 @@ function ProfilePanel({
 	);
 }
 
+/**
+ * 生成 memo API 调用入口地址。
+ */
+function getMemoApiEndpoint(): string {
+	return new URL('/api/v1/memos', API_BASE_URL).toString();
+}
+
+type ApiTokenScopeDraft = {
+	scope: 'all' | 'tags';
+	tags: string[];
+};
+
+/**
+ * 读取本地保存的 API token 范围草稿。
+ */
+function parseStoredApiTokenScope(value: string | null): ApiTokenScopeDraft | null {
+	if (!value) {
+		return null;
+	}
+	try {
+		const parsed = JSON.parse(value) as Partial<ApiTokenScopeDraft>;
+		if (parsed.scope !== 'all' && parsed.scope !== 'tags') {
+			return null;
+		}
+		const tags = Array.isArray(parsed.tags)
+			? parsed.tags.filter((tagName): tagName is string => typeof tagName === 'string')
+			: [];
+		return {
+			scope: parsed.scope,
+			tags: parsed.scope === 'tags' ? tags : [],
+		};
+	} catch {
+		return null;
+	}
+}
+
 function SettingsPanel() {
+	const endpoint = getMemoApiEndpoint();
+	const currentUser = useMe();
+	const [apiTokens, setApiTokens] = useState<ApiToken[]>([]);
+	const [apiTokenName, setApiTokenName] = useState('默认 API Token');
+	const [apiTokenScope, setApiTokenScope] = useState<'all' | 'tags'>('all');
+	const [apiTokenTagsText, setApiTokenTagsText] = useState('');
+	const [savedApiTokenScope, setSavedApiTokenScope] = useState<ApiTokenScopeDraft>({ scope: 'all', tags: [] });
+	const [generatedToken, setGeneratedToken] = useState<string | null>(null);
+	const [apiTokenLoading, setApiTokenLoading] = useState(false);
+	const [apiTokenSubmitting, setApiTokenSubmitting] = useState(false);
+	const availableTags = useTags();
+	const apiTokenScopeStorageKey = currentUser.data?.user.id
+		? `${API_TOKEN_SCOPE_STORAGE_PREFIX}:${currentUser.data.user.id}`
+		: null;
+	const curlExample = `curl -H "Authorization: Bearer <API_TOKEN>" "${endpoint}?tags=${encodeURIComponent('工作,灵感')}&page=1&pageSize=20"`;
+	const selectedApiTokenTags = useMemo(
+		() =>
+			Array.from(
+				new Set(
+					apiTokenTagsText
+						.split(API_TOKEN_TAG_SEPARATOR_PATTERN)
+						.map((tagName) => tagName.trim().replace(/^#+/u, ''))
+						.filter(Boolean),
+				),
+			),
+		[apiTokenTagsText],
+	);
+	const apiTokenScopeDirty =
+		savedApiTokenScope.scope !== apiTokenScope ||
+		savedApiTokenScope.tags.join('\n') !== (apiTokenScope === 'tags' ? selectedApiTokenTags.join('\n') : '');
+
+	async function copyApiText(value: string, successMessage: string) {
+		try {
+			await navigator.clipboard.writeText(value);
+			toast.success(successMessage);
+		} catch {
+			toast.error('复制失败，请手动复制');
+		}
+	}
+
+	async function loadApiTokens() {
+		setApiTokenLoading(true);
+		try {
+			const data = await api.listApiTokens();
+			setApiTokens(data.tokens);
+		} catch (error) {
+			toast.error(error instanceof ApiError ? error.message : 'API Token 加载失败');
+		} finally {
+			setApiTokenLoading(false);
+		}
+	}
+
+	async function generateApiToken() {
+		if (apiTokenScopeDirty) {
+			toast.error('请先保存可读范围设置');
+			return;
+		}
+		setApiTokenSubmitting(true);
+		try {
+			const data = await api.createApiToken({
+				name: apiTokenName,
+				scope: savedApiTokenScope.scope,
+				tags: savedApiTokenScope.scope === 'tags' ? savedApiTokenScope.tags : [],
+			});
+			setGeneratedToken(data.token);
+			setApiTokens((current) => [data.apiToken, ...current]);
+			toast.success('API Token 已生成');
+		} catch (error) {
+			toast.error(error instanceof ApiError ? error.message : 'API Token 生成失败');
+		} finally {
+			setApiTokenSubmitting(false);
+		}
+	}
+
+	function saveApiTokenScope() {
+		if (apiTokenScope === 'tags' && selectedApiTokenTags.length === 0) {
+			toast.error('请选择至少一个可读标签');
+			return;
+		}
+		const nextScope: ApiTokenScopeDraft = {
+			scope: apiTokenScope,
+			tags: apiTokenScope === 'tags' ? selectedApiTokenTags : [],
+		};
+		setSavedApiTokenScope(nextScope);
+		if (apiTokenScopeStorageKey) {
+			window.localStorage.setItem(apiTokenScopeStorageKey, JSON.stringify(nextScope));
+		}
+		toast.success('可读范围已保存');
+	}
+
+	function toggleApiTokenTag(tagName: string) {
+		const next = selectedApiTokenTags.includes(tagName)
+			? selectedApiTokenTags.filter((item) => item !== tagName)
+			: [...selectedApiTokenTags, tagName];
+		setApiTokenTagsText(next.join('，'));
+	}
+
+	async function revokeCurrentApiToken(tokenId: string) {
+		setApiTokenSubmitting(true);
+		try {
+			await api.revokeApiToken(tokenId);
+			setApiTokens((current) => current.filter((token) => token.id !== tokenId));
+			toast.success('API Token 已撤销');
+		} catch (error) {
+			toast.error(error instanceof ApiError ? error.message : 'API Token 撤销失败');
+		} finally {
+			setApiTokenSubmitting(false);
+		}
+	}
+
+	useEffect(() => {
+		void loadApiTokens();
+	}, []);
+
+	useEffect(() => {
+		if (!apiTokenScopeStorageKey) {
+			return;
+		}
+		const storedScope = parseStoredApiTokenScope(window.localStorage.getItem(apiTokenScopeStorageKey));
+		if (!storedScope) {
+			return;
+		}
+		setApiTokenScope(storedScope.scope);
+		setApiTokenTagsText(storedScope.tags.join('，'));
+		setSavedApiTokenScope(storedScope);
+	}, [apiTokenScopeStorageKey]);
+
 	return (
 		<section className='settings-panel'>
-			<div className='settings-empty-state'>
-				<p>暂无设置，正在开发中</p>
-			</div>
+			<section className='settings-section api-settings-section'>
+				<div className='api-settings-header'>
+					<div className='api-settings-title-row'>
+						<span className='api-settings-icon'>
+							<Braces size={19} />
+						</span>
+						<div>
+							<p className='settings-label'>开放能力</p>
+							<h2 className='settings-title'>API 调用</h2>
+						</div>
+					</div>
+					<Button
+						type='button'
+						variant='secondary'
+						size='sm'
+						className='api-copy-button'
+						onClick={() => void copyApiText(endpoint, 'API 地址已复制')}
+					>
+						<Copy size={14} />
+						复制地址
+					</Button>
+				</div>
+
+				<div className='api-endpoint-box'>
+					<span>GET</span>
+					<code>{endpoint}</code>
+				</div>
+
+				<div className='api-param-grid'>
+					<div>
+						<strong>标签</strong>
+						<span>tag / tags</span>
+					</div>
+					<div>
+						<strong>分页</strong>
+						<span>cursor 或 page/pageSize</span>
+					</div>
+					<div>
+						<strong>认证</strong>
+						<span>Bearer API Token</span>
+					</div>
+				</div>
+
+				<div className='api-token-warning'>
+					<strong>安全提示</strong>
+					<span>API Token 等同于只读数据钥匙，请只保存在可信环境；如果怀疑泄露，立即撤销并重新生成。</span>
+				</div>
+
+				<div className='api-token-generator'>
+					<div className='api-scope-control'>
+						<button
+							type='button'
+							data-active={apiTokenScope === 'all' ? 'true' : undefined}
+							onClick={() => setApiTokenScope('all')}
+						>
+							全部
+						</button>
+						<button
+							type='button'
+							data-active={apiTokenScope === 'tags' ? 'true' : undefined}
+							onClick={() => setApiTokenScope('tags')}
+						>
+							指定标签
+						</button>
+					</div>
+
+					{apiTokenScope === 'tags' && (
+						<div className='api-scope-tags'>
+							<Input
+								value={apiTokenTagsText}
+								onChange={(event) => setApiTokenTagsText(event.target.value)}
+								placeholder='输入可读标签，可用逗号、空格或换行分隔'
+							/>
+							<div className='api-scope-tag-list'>
+								{(availableTags.data?.tags ?? []).map((tagItem) => (
+									<button
+										key={tagItem.id}
+										type='button'
+										data-selected={selectedApiTokenTags.includes(tagItem.name) ? 'true' : undefined}
+										onClick={() => toggleApiTokenTag(tagItem.name)}
+									>
+										#{tagItem.name}
+									</button>
+								))}
+							</div>
+						</div>
+					)}
+
+					<div className='api-scope-actions'>
+						<div>
+							<strong>当前将保存为</strong>
+							<span>
+								{apiTokenScope === 'tags'
+									? selectedApiTokenTags.length > 0
+										? selectedApiTokenTags.map((tagName) => `#${tagName}`).join('、')
+										: '尚未选择标签'
+									: '全部可读'}
+							</span>
+						</div>
+						<Button
+							type='button'
+							variant={apiTokenScopeDirty ? 'primary' : 'secondary'}
+							size='sm'
+							onClick={saveApiTokenScope}
+						>
+							<Check size={14} />
+							保存范围设置
+						</Button>
+					</div>
+
+					<div className='api-token-input-row'>
+						<Input
+							value={apiTokenName}
+							maxLength={64}
+							onChange={(event) => setApiTokenName(event.target.value)}
+							placeholder='Token 名称'
+						/>
+						<Button
+							type='button'
+							disabled={apiTokenSubmitting || !apiTokenName.trim() || apiTokenScopeDirty}
+							onClick={() => void generateApiToken()}
+						>
+							<KeyRound size={15} />
+							{apiTokenScopeDirty ? '先保存范围' : apiTokenSubmitting ? '生成中' : '生成 Token'}
+						</Button>
+					</div>
+
+					{generatedToken && (
+						<div className='api-generated-token'>
+							<div>
+								<strong>新的 API Token</strong>
+								<span>请现在复制，关闭或刷新后不会再次显示。</span>
+							</div>
+							<code>{generatedToken}</code>
+							<Button
+								type='button'
+								variant='secondary'
+								size='sm'
+								className='api-copy-button'
+								onClick={() => void copyApiText(generatedToken, 'API Token 已复制')}
+							>
+								<Copy size={14} />
+								复制 Token
+							</Button>
+						</div>
+					)}
+
+					<div className='api-token-list'>
+						{apiTokenLoading && <div className='api-token-row api-token-row-muted'>正在加载 API Token</div>}
+						{!apiTokenLoading && apiTokens.length === 0 && (
+							<div className='api-token-row api-token-row-muted'>还没有可用的 API Token</div>
+						)}
+						{apiTokens.map((token) => (
+							<div
+								key={token.id}
+								className='api-token-row'
+							>
+								<div>
+									<strong>{token.name}</strong>
+									<span>
+										{token.prefix}... · {token.scope === 'tags' ? `指定标签：${token.tags.map((tagName) => `#${tagName}`).join('、')}` : '全部可读'} · 创建于 {formatDateTime(token.createdAt)}
+										{token.lastUsedAt ? ` · 最近使用 ${formatDateTime(token.lastUsedAt)}` : ''}
+									</span>
+								</div>
+								<Button
+									type='button'
+									variant='ghost'
+									size='sm'
+									disabled={apiTokenSubmitting}
+									onClick={() => void revokeCurrentApiToken(token.id)}
+								>
+									撤销
+								</Button>
+							</div>
+						))}
+					</div>
+				</div>
+
+				<div className='api-example-block'>
+					<div className='api-example-header'>
+						<span>
+							<Terminal size={15} />
+							curl
+						</span>
+						<button
+							type='button'
+							onClick={() => void copyApiText(curlExample, '调用示例已复制')}
+						>
+							<Copy size={14} />
+						</button>
+					</div>
+					<pre>{curlExample}</pre>
+				</div>
+			</section>
 		</section>
 	);
 }

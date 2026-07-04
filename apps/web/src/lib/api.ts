@@ -4,8 +4,11 @@ import type {
   AdminInviteCode,
   AdminInviteRegistrationResponse,
   AiEntitlementResponse,
+  ApiTokenListResponse,
   AuthResponse,
   CalendarStatsResponse,
+  CreateApiTokenRequest,
+  CreateApiTokenResponse,
   DeleteArchivedMemosResponse,
   Memo,
   MemoListQuery,
@@ -35,8 +38,9 @@ function getDefaultApiBaseUrl(): string {
 }
 
 const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim();
-const API_BASE_URL = configuredApiBaseUrl || getDefaultApiBaseUrl();
+export const API_BASE_URL = configuredApiBaseUrl || getDefaultApiBaseUrl();
 const SESSION_TOKEN_KEY = "flowmemo_session_token";
+type QueryValue = string | number | string[] | number[] | undefined | null;
 
 /**
  * 判断 API 是否和当前页面同源。
@@ -109,10 +113,16 @@ export class ApiError extends Error {
 /**
  * 构造带查询参数的 API URL。
  */
-function buildUrl(path: string, query?: Record<string, string | number | undefined | null>): string {
+function buildUrl(path: string, query?: Record<string, QueryValue>): string {
   const url = new URL(path, API_BASE_URL);
   for (const [key, value] of Object.entries(query ?? {})) {
-    if (value !== undefined && value !== null && value !== "") {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item !== "") {
+          url.searchParams.append(key, String(item));
+        }
+      }
+    } else if (value !== undefined && value !== null && value !== "") {
       url.searchParams.set(key, String(value));
     }
   }
@@ -122,7 +132,7 @@ function buildUrl(path: string, query?: Record<string, string | number | undefin
 /**
  * 发起 API 请求，并统一处理错误信息和 Cookie。
  */
-async function request<T>(path: string, options: RequestInit = {}, query?: Record<string, string | number | undefined>) {
+async function request<T>(path: string, options: RequestInit = {}, query?: Record<string, QueryValue>) {
   const sessionToken = readSessionToken();
   const response = await fetch(buildUrl(path, query), {
     ...options,
@@ -170,7 +180,7 @@ async function requestForm<T>(path: string, body: FormData): Promise<T> {
 async function requestBlob(
   path: string,
   options: RequestInit = {},
-  query?: Record<string, string | number | undefined>
+  query?: Record<string, QueryValue>
 ): Promise<Blob> {
   const sessionToken = readSessionToken();
   const response = await fetch(buildUrl(path, query), {
@@ -299,7 +309,31 @@ export const api = {
   },
 
   listMemos(query: MemoListQuery) {
-    return request<MemoListResponse>("/api/memos", {}, query as Record<string, string | number | undefined>);
+    return request<MemoListResponse>("/api/memos", {}, query as Record<string, QueryValue>);
+  },
+
+  /**
+   * 查询当前用户 API Token。
+   */
+  listApiTokens() {
+    return request<ApiTokenListResponse>("/api/api-tokens");
+  },
+
+  /**
+   * 生成新的 API Token，原始 token 仅本次响应返回。
+   */
+  createApiToken(payload: CreateApiTokenRequest) {
+    return request<CreateApiTokenResponse>("/api/api-tokens", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+
+  /**
+   * 撤销 API Token。
+   */
+  revokeApiToken(id: string) {
+    return request<{ ok: true }>(`/api/api-tokens/${id}`, { method: "DELETE" });
   },
 
   /**

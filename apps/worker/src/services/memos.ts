@@ -1,9 +1,27 @@
-import type { CalendarDayStat, Memo, OverviewStatsResponse, PublishedMemo, PublicMemo, Tag } from "@flowmemo/shared";
+import type {
+  CalendarDayStat,
+  Memo,
+  MemoListQuery,
+  MemoListResponse,
+  OverviewStatsResponse,
+  PublishedMemo,
+  PublicMemo,
+  Tag
+} from "@flowmemo/shared";
 import type { AppEnv, DbMemo, DbPublicMemo, DbTag } from "../types";
 import { extractTags, normalizeTag } from "../utils/tags";
 import { nowIso } from "../utils/http";
 
 type Db = AppEnv["Bindings"]["DB"];
+type MemoListAccess = {
+  restrictToReadableTags?: boolean;
+  readableTags?: string[];
+};
+type MemoCursor = {
+  pinned: number;
+  createdAt: string;
+  id: string;
+};
 
 /**
  * 将数据库标签行转换成 API 标签对象。
@@ -42,6 +60,83 @@ function generatePublicId(): string {
   crypto.getRandomValues(bytes);
   const value = bytes.reduce((sum, byte) => (sum * 256 + byte) % 10000000000, 0);
   return String(value).padStart(10, "0");
+}
+
+/**
+ * 生成列表分页游标，记录完整排序键以避免置顶排序下跳页。
+ */
+function encodeMemoCursor(row: DbMemo): string {
+  const payload: MemoCursor = {
+    pinned: row.pinned ? 1 : 0,
+    createdAt: row.created_at,
+    id: row.id
+  };
+  return btoa(JSON.stringify(payload)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+}
+
+/**
+ * 解析列表分页游标；旧版纯时间游标会在调用处继续兼容。
+ */
+function decodeMemoCursor(cursor: string): MemoCursor | null {
+  try {
+    const padded = cursor.replaceAll("-", "+").replaceAll("_", "/").padEnd(Math.ceil(cursor.length / 4) * 4, "=");
+    const value = JSON.parse(atob(padded)) as Partial<MemoCursor>;
+    if (
+      (value.pinned === 0 || value.pinned === 1) &&
+      typeof value.createdAt === "string" &&
+      typeof value.id === "string"
+    ) {
+      return {
+        pinned: value.pinned,
+        createdAt: value.createdAt,
+        id: value.id
+      };
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+/**
+ * 标准化标签筛选参数，兼容单标签和多标签 API 调用。
+ */
+function normalizeTagFilters(params: Pick<MemoListQuery, "tag" | "tags">): string[] {
+  const names = [params.tag, ...(params.tags ?? [])]
+    .filter((name): name is string => typeof name === "string")
+    .map((name) => normalizeTag(name))
+    .filter(Boolean);
+
+  return Array.from(new Set(names));
+}
+
+/**
+ * 标准化列表分页大小。
+ */
+function normalizeListLimit(params: Pick<MemoListQuery, "limit" | "pageSize">): number {
+  const limit = Number(params.pageSize ?? params.limit ?? 30);
+  if (!Number.isFinite(limit)) {
+    return 30;
+  }
+
+  return Math.min(Math.max(Math.floor(limit), 1), 50);
+}
+
+/**
+ * 标准化页码参数。
+ */
+function normalizePage(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const page = Number(value);
+  if (!Number.isInteger(page)) {
+    return undefined;
+  }
+
+  return Math.max(page, 1);
 }
 
 /**
@@ -125,18 +220,15 @@ export async function syncMemoTags(db: Db, userId: string, memoId: string, conte
 export async function listMemos(
   db: Db,
   userId: string,
-  params: {
-    view?: string;
-    tag?: string;
-    q?: string;
-    date?: string;
-    cursor?: string;
-    limit?: number;
-  }
-): Promise<{ memos: Memo[]; nextCursor: string | null }> {
+  params: MemoListQuery,
+  access: MemoListAccess = {}
+): Promise<MemoListResponse> {
   const where = ["memos.user_id = ?"];
   const binds: unknown[] = [userId];
-  const limit = Math.min(Math.max(Number(params.limit ?? 30), 1), 50);
+  const limit = normalizeListLimit(params);
+  const pageNumber = params.cursor ? undefined : normalizePage(params.page);
+  const tagFilters = normalizeTagFilters(params);
+  const readableTags = Array.from(new Set((access.readableTags ?? []).map((tag) => normalizeTag(tag)).filter(Boolean)));
 
   if (params.view === "archive") {
     where.push("memos.archived_at IS NOT NULL");
@@ -159,41 +251,85 @@ export async function listMemos(
   }
 
   if (params.cursor) {
-    where.push("memos.created_at < ?");
-    binds.push(params.cursor);
+    const cursor = decodeMemoCursor(params.cursor);
+    if (cursor) {
+      where.push(
+        `(memos.pinned < ?
+          OR (memos.pinned = ? AND memos.created_at < ?)
+          OR (memos.pinned = ? AND memos.created_at = ? AND memos.id < ?))`
+      );
+      binds.push(cursor.pinned, cursor.pinned, cursor.createdAt, cursor.pinned, cursor.createdAt, cursor.id);
+    } else {
+      where.push("memos.created_at < ?");
+      binds.push(params.cursor);
+    }
   }
 
-  let join = "";
-  if (params.tag) {
-    join = "JOIN memo_tags ON memo_tags.memo_id = memos.id JOIN tags ON tags.id = memo_tags.tag_id";
-    where.push("tags.normalized_name = ?");
-    binds.push(normalizeTag(params.tag));
+  const requestedTagOutsideScope =
+    access.restrictToReadableTags === true && tagFilters.some((tag) => !readableTags.includes(tag));
+  const effectiveTagFilters = tagFilters.length > 0 ? tagFilters : access.restrictToReadableTags ? readableTags : [];
+  const requireAllEffectiveTags = tagFilters.length > 0;
+  if (requestedTagOutsideScope || (access.restrictToReadableTags === true && readableTags.length === 0)) {
+    where.push("1 = 0");
+  } else if (effectiveTagFilters.length > 0) {
+    const placeholders = effectiveTagFilters.map(() => "?").join(",");
+    where.push(
+      `memos.id IN (
+        SELECT memo_tags.memo_id
+        FROM memo_tags
+        JOIN tags ON tags.id = memo_tags.tag_id
+        WHERE tags.user_id = ? AND tags.normalized_name IN (${placeholders})
+        GROUP BY memo_tags.memo_id
+        ${requireAllEffectiveTags ? "HAVING COUNT(DISTINCT tags.normalized_name) = ?" : ""}
+      )`
+    );
+    binds.push(userId, ...effectiveTagFilters, ...(requireAllEffectiveTags ? [effectiveTagFilters.length] : []));
   }
 
+  const countBinds = [...binds];
+  const offset = pageNumber ? (pageNumber - 1) * limit : 0;
   const rows = await db
     .prepare(
       `SELECT memos.*, public_memos.public_id
        FROM memos
        LEFT JOIN public_memos ON public_memos.memo_id = memos.id
-       ${join}
        WHERE ${where.join(" AND ")}
-       ORDER BY memos.pinned DESC, memos.created_at DESC
-       LIMIT ?`
+       ORDER BY memos.pinned DESC, memos.created_at DESC, memos.id DESC
+       LIMIT ?
+       ${pageNumber ? "OFFSET ?" : ""}`
     )
-    .bind(...binds, limit + 1)
+    .bind(...binds, limit + 1, ...(pageNumber ? [offset] : []))
     .all<DbMemo>();
 
   const results = rows.results ?? [];
-  const page = results.slice(0, limit);
+  const memoPage = results.slice(0, limit);
   const tagMap = await getTagsForMemos(
     db,
-    page.map((memo) => memo.id)
+    memoPage.map((memo) => memo.id)
   );
 
-  return {
-    memos: page.map((memo) => mapMemo(memo, tagMap.get(memo.id) ?? [])),
-    nextCursor: results.length > limit ? page.at(-1)?.created_at ?? null : null
+  const response: MemoListResponse = {
+    memos: memoPage.map((memo) => mapMemo(memo, tagMap.get(memo.id) ?? [])),
+    nextCursor: results.length > limit ? (memoPage.at(-1) ? encodeMemoCursor(memoPage.at(-1) as DbMemo) : null) : null
   };
+
+  if (pageNumber) {
+    const totalRow = await db
+      .prepare(
+        `SELECT COUNT(*) as total
+         FROM memos
+         WHERE ${where.join(" AND ")}`
+      )
+      .bind(...countBinds)
+      .first<{ total: number }>();
+    const total = Number(totalRow?.total ?? 0);
+    response.page = pageNumber;
+    response.pageSize = limit;
+    response.total = total;
+    response.totalPages = Math.ceil(total / limit);
+  }
+
+  return response;
 }
 
 /**
