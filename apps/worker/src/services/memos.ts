@@ -226,7 +226,8 @@ export async function listMemos(
   const where = ["memos.user_id = ?"];
   const binds: unknown[] = [userId];
   const limit = normalizeListLimit(params);
-  const pageNumber = params.cursor ? undefined : normalizePage(params.page);
+  // page 与 cursor 同时传入时以 page 为准，避免调用方携带过期 cursor 导致 page 失效
+  const pageNumber = normalizePage(params.page);
   const tagFilters = normalizeTagFilters(params);
   const readableTags = Array.from(new Set((access.readableTags ?? []).map((tag) => normalizeTag(tag)).filter(Boolean)));
 
@@ -250,7 +251,7 @@ export async function listMemos(
     binds.push(params.date);
   }
 
-  if (params.cursor) {
+  if (!pageNumber && params.cursor) {
     const cursor = decodeMemoCursor(params.cursor);
     if (cursor) {
       where.push(

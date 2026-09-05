@@ -183,6 +183,8 @@ export type ApiToken = {
   id: string;
   name: string;
   prefix: string;
+  /** 完整 token 明文；旧版本创建的 token 未保存明文，为 null */
+  token: string | null;
   scope: "all" | "tags";
   tags: string[];
   lastUsedAt: string | null;

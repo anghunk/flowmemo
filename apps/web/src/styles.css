@@ -1945,6 +1945,31 @@ textarea {
   font-size: 13px;
 }
 
+.api-token-value {
+  display: block;
+  margin-top: 7px;
+  overflow-wrap: anywhere;
+  border: 1px solid #f0f0f0;
+  border-radius: 7px;
+  background: #fafafa;
+  padding: 7px 9px;
+  color: #444;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.api-token-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.api-token-row-legacy {
+  margin-top: 7px;
+  color: #a06a28;
+}
+
 @media (max-width: 640px) {
   .api-settings-header {
     align-items: stretch;

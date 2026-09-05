@@ -32,7 +32,10 @@ function parseAllowedOrigins(value: string): Set<string> {
 }
 
 /**
- * 配置跨域响应头，允许前端携带 HttpOnly Cookie 请求 API。
+ * 配置跨域响应头，按调用方是否依赖 Cookie 分级放行：
+ * - 白名单 origin（WEB_ORIGIN）允许携带 HttpOnly Cookie 的登录态请求，回显具体 origin；
+ * - 其余 origin 仅放行不带 Cookie 的调用（API Token / Bearer 认证），返回 Allow-Origin: *，
+ *   携带 Cookie 的跨站请求不享受通配放行，避免登录态被第三方页面读取。
  */
 export async function corsMiddleware(c: Context<AppEnv>, next: Next) {
   const origin = c.req.header("Origin");
@@ -40,10 +43,15 @@ export async function corsMiddleware(c: Context<AppEnv>, next: Next) {
 
   if (origin && allowedOrigins.has(origin)) {
     c.header("Access-Control-Allow-Origin", origin);
+    c.header("Access-Control-Allow-Credentials", "true");
+  } else if (origin && !readSessionToken(c)) {
+    c.header("Access-Control-Allow-Origin", "*");
+  }
+
+  if (origin) {
     c.header("Vary", "Origin");
   }
 
-  c.header("Access-Control-Allow-Credentials", "true");
   c.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
   c.header("Access-Control-Allow-Methods", "GET,POST,PATCH,DELETE,OPTIONS");
 

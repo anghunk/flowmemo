@@ -2515,55 +2515,76 @@ function SettingsPanel() {
 						</Button>
 					</div>
 
-					{generatedToken && (
-						<div className='api-generated-token'>
-							<div>
-								<strong>新的 API Token</strong>
-								<span>请现在复制，关闭或刷新后不会再次显示。</span>
-							</div>
-							<code>{generatedToken}</code>
-							<Button
-								type='button'
-								variant='secondary'
-								size='sm'
-								className='api-copy-button'
-								onClick={() => void copyApiText(generatedToken, 'API Token 已复制')}
-							>
-								<Copy size={14} />
-								复制 Token
-							</Button>
-						</div>
-					)}
-
-					<div className='api-token-list'>
-						{apiTokenLoading && <div className='api-token-row api-token-row-muted'>正在加载 API Token</div>}
-						{!apiTokenLoading && apiTokens.length === 0 && (
-							<div className='api-token-row api-token-row-muted'>还没有可用的 API Token</div>
-						)}
-						{apiTokens.map((token) => (
-							<div
-								key={token.id}
-								className='api-token-row'
-							>
+						{generatedToken && (
+							<div className='api-generated-token'>
 								<div>
-									<strong>{token.name}</strong>
-									<span>
-										{token.prefix}... · {token.scope === 'tags' ? `指定标签：${token.tags.map((tagName) => `#${tagName}`).join('、')}` : '全部可读'} · 创建于 {formatDateTime(token.createdAt)}
-										{token.lastUsedAt ? ` · 最近使用 ${formatDateTime(token.lastUsedAt)}` : ''}
-									</span>
+									<strong>新的 API Token</strong>
+									<span>已保存到下方列表，之后可随时查看和复制。</span>
 								</div>
+								<code>{generatedToken}</code>
 								<Button
 									type='button'
-									variant='ghost'
+									variant='secondary'
 									size='sm'
-									disabled={apiTokenSubmitting}
-									onClick={() => void revokeCurrentApiToken(token.id)}
+									className='api-copy-button'
+									onClick={() => void copyApiText(generatedToken, 'API Token 已复制')}
 								>
-									撤销
+									<Copy size={14} />
+									复制 Token
 								</Button>
 							</div>
-						))}
-					</div>
+						)}
+
+						<div className='api-token-list'>
+							{apiTokenLoading && <div className='api-token-row api-token-row-muted'>正在加载 API Token</div>}
+							{!apiTokenLoading && apiTokens.length === 0 && (
+								<div className='api-token-row api-token-row-muted'>还没有可用的 API Token</div>
+							)}
+							{apiTokens.map((token) => {
+								const tokenValue = token.token;
+								return (
+									<div
+										key={token.id}
+										className='api-token-row'
+									>
+										<div>
+											<strong>{token.name}</strong>
+											<span>
+												{token.scope === 'tags' ? `指定标签：${token.tags.map((tagName) => `#${tagName}`).join('、')}` : '全部可读'} · 创建于 {formatDateTime(token.createdAt)}
+												{token.lastUsedAt ? ` · 最近使用 ${formatDateTime(token.lastUsedAt)}` : ''}
+											</span>
+											{tokenValue ? (
+												<code className='api-token-value'>{tokenValue}</code>
+											) : (
+												<span className='api-token-row-legacy'>创建于旧版本，无法再次查看完整 Token，如需复制请撤销后重新生成</span>
+											)}
+										</div>
+										<div className='api-token-row-actions'>
+											{tokenValue && (
+												<Button
+													type='button'
+													variant='ghost'
+													size='sm'
+													onClick={() => void copyApiText(tokenValue, 'API Token 已复制')}
+												>
+													<Copy size={14} />
+													复制
+												</Button>
+											)}
+											<Button
+												type='button'
+												variant='ghost'
+												size='sm'
+												disabled={apiTokenSubmitting}
+												onClick={() => void revokeCurrentApiToken(token.id)}
+											>
+												撤销
+											</Button>
+										</div>
+									</div>
+								);
+							})}
+						</div>
 				</div>
 
 				<div className='api-example-block'>

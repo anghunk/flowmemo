@@ -87,6 +87,7 @@ export type DbApiToken = {
   name: string;
   token_hash: string;
   token_prefix: string;
+  token_value: string | null;
   scope: string;
   allowed_tags_json: string;
   last_used_at: string | null;

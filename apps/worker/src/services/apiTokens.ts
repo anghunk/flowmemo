@@ -68,6 +68,8 @@ function mapApiToken(row: DbApiToken): ApiToken {
     id: row.id,
     name: row.name,
     prefix: row.token_prefix,
+    // 旧版本创建的 token 未保存明文，无法再次展示
+    token: row.token_value,
     scope,
     tags: scope === "tags" ? parseAllowedTags(row.allowed_tags_json) : [],
     lastUsedAt: row.last_used_at,
@@ -109,8 +111,8 @@ export async function createApiToken(
   const tokenPrefix = token.slice(0, 10);
   const row = await db
     .prepare(
-      `INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix, scope, allowed_tags_json, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO api_tokens (id, user_id, name, token_hash, token_prefix, token_value, scope, allowed_tags_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        RETURNING *`
     )
     .bind(
@@ -119,6 +121,7 @@ export async function createApiToken(
       name,
       tokenHash,
       tokenPrefix,
+      token,
       tokenScope.scope,
       JSON.stringify(tokenScope.tags),
       now

@@ -926,8 +926,7 @@ app.post("/api/memos", requireAuth, async (c) => {
     return jsonError(c, imageCountError);
   }
 
-  const memo = await createMemo(c.env.DB, c.get("user").id, content);
-  return c.json({ memo }, 201);
+  const memo = await createMemo(c.env.DB, c.get("user").id, content);  return c.json({ memo }, 201);
 });
 
 app.get("/api/memos/random", requireAuth, async (c) => {
@@ -1022,13 +1021,11 @@ app.post("/api/memos/:id/public", requireAuth, async (c) => {
   const published = await publishMemo(c.env.DB, c.get("user").id, c.req.param("id"));
   if (!published) {
     return jsonError(c, "memo 不存在或已经归档", 404);
-  }
-  return c.json({ published });
+  }  return c.json({ published });
 });
 
 app.delete("/api/memos/:id/public", requireAuth, async (c) => {
-  await unpublishMemo(c.env.DB, c.get("user").id, c.req.param("id"));
-  return c.json({ ok: true });
+  await unpublishMemo(c.env.DB, c.get("user").id, c.req.param("id"));  return c.json({ ok: true });
 });
 
 app.get("/api/explore/:publicId", async (c) => {
@@ -1073,21 +1070,18 @@ app.patch("/api/memos/:id", requireAuth, async (c) => {
   if (!memo) {
     return jsonError(c, "memo 不存在", 404);
   }
-
   return c.json({ memo });
 });
 
 app.delete("/api/memos/archive", requireAuth, async (c) => {
-  const deleted = await permanentlyDeleteArchivedMemos(c.env.DB, c.get("user").id);
-  return c.json({ ok: true, deleted });
+  const deleted = await permanentlyDeleteArchivedMemos(c.env.DB, c.get("user").id);  return c.json({ ok: true, deleted });
 });
 
 app.delete("/api/memos/:id", requireAuth, async (c) => {
   const memo = await permanentlyDeleteMemo(c.env.DB, c.get("user").id, c.req.param("id"));
   if (!memo) {
     return jsonError(c, "memo 不存在或尚未归档", 404);
-  }
-  return c.json({ ok: true });
+  }  return c.json({ ok: true });
 });
 
 app.get("/api/tags", requireAuth, async (c) => {
@@ -1106,7 +1100,6 @@ app.patch("/api/tags/:id", requireAuth, async (c) => {
   if (!tag) {
     return jsonError(c, "标签不存在", 404);
   }
-
   return c.json({ tag });
 });
 
