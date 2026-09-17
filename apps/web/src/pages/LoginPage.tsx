@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
+import { Github } from "lucide-react";
 import { motion } from "motion/react";
 import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
@@ -61,6 +62,18 @@ export function LoginPage() {
             去注册
           </Link>
         </p>
+
+        <div className="mt-6 border-t border-border pt-4">
+          <a
+            className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-emerald-700"
+            href="https://github.com/anghunk/flowmemo"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <Github aria-hidden="true" className="h-4 w-4" />
+            本站源码已在 GitHub 开源
+          </a>
+        </div>
       </motion.section>
     </main>
   );
