@@ -2,7 +2,7 @@
   <a href="https://github.com/anghunk/flowmemo">
     <img src="apps/web/icon.png" alt="Logo" width="90" height="90">
   </a>
-  <h2>FlowMemo Cloudflare</h2>
+  <h2>FlowMemo</h2>
 </div>
 
 一个前后端分离的轻量 memo 网页应用。
