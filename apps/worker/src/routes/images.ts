@@ -169,5 +169,6 @@ imageRoutes.get("/api/uploads/*", async (c) => {
   headers.set("Cache-Control", "private, no-store");
   headers.set("Vary", "Origin, Cookie, Authorization");
   headers.set("X-Content-Type-Options", "nosniff");
-  return new Response(image.body, { status: 200, headers });
+  // 保留 Hono 中间件设置的 CORS 响应头，支持外站带 Token 读取图片。
+  return c.body(image.body, { status: 200, headers });
 });
