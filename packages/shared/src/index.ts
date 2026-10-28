@@ -224,6 +224,34 @@ export type AuthResponse = {
   sessionToken?: string;
 };
 
+/** 注册请求，邀请码仅在服务端开启邀请码模式时必填。 */
+export type RegisterRequest = {
+  account: string;
+  password: string;
+  inviteCode?: string;
+};
+
+/** 使用账号密码创建会话。 */
+export type LoginRequest = Pick<RegisterRequest, "account" | "password">;
+
+/** 修改昵称；空字符串表示清空。 */
+export type UpdateProfileRequest = { nickname: string };
+
+/** 验证旧密码后设置新密码。 */
+export type ChangePasswordRequest = { oldPassword: string; newPassword: string };
+
+/** 创建 Markdown 笔记。 */
+export type CreateMemoRequest = { content: string };
+
+/** 只修改明确提供的笔记字段。 */
+export type UpdateMemoRequest = { content?: string; pinned?: boolean; archived?: boolean };
+
+/** 只更新提供的用户偏好。 */
+export type UpdatePreferencesRequest = Partial<UserPreferences>;
+
+/** 设置或清空标签图标。 */
+export type UpdateTagRequest = { icon: string | null };
+
 export type CalendarStatsResponse = {
   days: CalendarDayStat[];
 };

@@ -40,8 +40,18 @@ function parseAllowedOrigins(value: string): Set<string> {
 export async function corsMiddleware(c: Context<AppEnv>, next: Next) {
   const origin = c.req.header("Origin");
   const allowedOrigins = parseAllowedOrigins(c.env.WEB_ORIGIN);
+  const trustedOrigin = Boolean(origin && (allowedOrigins.has(origin) || origin === new URL(c.req.url).origin));
 
-  if (origin && allowedOrigins.has(origin)) {
+  // Cookie 会被浏览器自动携带，写请求必须明确来自受信任的页面。
+  if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
+    const cookieAuthenticated = Boolean(readSessionToken(c));
+    const bearerAuthenticated = Boolean(c.req.header("Authorization")?.startsWith("Bearer "));
+    if ((cookieAuthenticated && !trustedOrigin) || (origin && !trustedOrigin && !bearerAuthenticated)) {
+      return jsonError(c, "请求来源不受信任，请从应用页面重试", 403);
+    }
+  }
+
+  if (origin && trustedOrigin) {
     c.header("Access-Control-Allow-Origin", origin);
     c.header("Access-Control-Allow-Credentials", "true");
   } else if (origin && !readSessionToken(c)) {

@@ -1,3 +1,4 @@
+import type { RegisterRequest, LoginRequest, UpdateProfileRequest, ChangePasswordRequest, CreateMemoRequest, UpdateMemoRequest, UpdatePreferencesRequest } from "@flowmemo/shared";
 import type {
   AdminUser,
   AdminUserListResponse,
@@ -224,10 +225,10 @@ export const api = {
   /**
    * 注册账号。
    */
-  register(account: string, password: string, inviteCode: string) {
+  register(account: string, password: string, inviteCode = "") {
     return request<AuthResponse>("/api/auth/register", {
       method: "POST",
-      body: JSON.stringify({ account, password, inviteCode })
+      body: JSON.stringify({ account, password, inviteCode } satisfies RegisterRequest)
     });
   },
 
@@ -237,7 +238,7 @@ export const api = {
   login(account: string, password: string) {
     return request<AuthResponse>("/api/auth/login", {
       method: "POST",
-      body: JSON.stringify({ account, password })
+      body: JSON.stringify({ account, password } satisfies LoginRequest)
     });
   },
 
@@ -261,7 +262,7 @@ export const api = {
   changePassword(oldPassword: string, newPassword: string) {
     return request<{ ok: true }>("/api/auth/change-password", {
       method: "POST",
-      body: JSON.stringify({ oldPassword, newPassword })
+      body: JSON.stringify({ oldPassword, newPassword } satisfies ChangePasswordRequest)
     });
   },
 
@@ -271,7 +272,7 @@ export const api = {
   updateProfile(nickname: string) {
     return request<AuthResponse>("/api/auth/profile", {
       method: "PATCH",
-      body: JSON.stringify({ nickname })
+      body: JSON.stringify({ nickname } satisfies UpdateProfileRequest)
     });
   },
 
@@ -320,7 +321,7 @@ export const api = {
   },
 
   /**
-   * 生成新的 API Token，原始 token 仅本次响应返回。
+   * 生成新的 API Token，并返回列表展示信息。
    */
   createApiToken(payload: CreateApiTokenRequest) {
     return request<CreateApiTokenResponse>("/api/api-tokens", {
@@ -342,7 +343,7 @@ export const api = {
   createMemo(content: string) {
     return request<{ memo: Memo }>("/api/memos", {
       method: "POST",
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ content } satisfies CreateMemoRequest)
     });
   },
 
@@ -393,7 +394,7 @@ export const api = {
   /**
    * 更新 memo。
    */
-  updateMemo(id: string, payload: { content?: string; pinned?: boolean; archived?: boolean }) {
+  updateMemo(id: string, payload: UpdateMemoRequest) {
     return request<{ memo: Memo }>(`/api/memos/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload)
@@ -454,6 +455,14 @@ export const api = {
    */
   preferences() {
     return request<{ preferences: UserPreferences }>("/api/preferences");
+  },
+
+  /** 只更新明确提供的偏好字段。 */
+  updatePreferences(payload: UpdatePreferencesRequest) {
+    return request<{ preferences: UserPreferences }>("/api/preferences", {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    });
   },
 
   /**

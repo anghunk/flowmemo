@@ -6,7 +6,8 @@ import type {
   OverviewStatsResponse,
   PublishedMemo,
   PublicMemo,
-  Tag
+  Tag,
+  UpdateMemoRequest
 } from "@flowmemo/shared";
 import type { AppEnv, DbMemo, DbPublicMemo, DbTag } from "../types";
 import { extractTags, normalizeTag } from "../utils/tags";
@@ -181,37 +182,25 @@ export async function getTagsForMemos(db: Db, memoIds: string[]): Promise<Map<st
 }
 
 /**
- * 同步 memo 内容中的标签关系。
+ * 准备标签同步语句，必须与正文写入放进同一次 D1 batch，失败时一起回滚。
  */
-export async function syncMemoTags(db: Db, userId: string, memoId: string, content: string): Promise<void> {
-  const now = nowIso();
-  const tagNames = extractTags(content);
-
-  await db.prepare("DELETE FROM memo_tags WHERE memo_id = ?").bind(memoId).run();
-
-  for (const name of tagNames) {
+function prepareMemoTagSync(db: Db, userId: string, memoId: string, content: string, now: string): D1PreparedStatement[] {
+  const statements = [db.prepare("DELETE FROM memo_tags WHERE memo_id = ?").bind(memoId)];
+  for (const name of extractTags(content)) {
     const normalizedName = normalizeTag(name);
-    const existing = await db
-      .prepare("SELECT * FROM tags WHERE user_id = ? AND normalized_name = ?")
-      .bind(userId, normalizedName)
-      .first<DbTag>();
-
-    const tagId = existing?.id ?? crypto.randomUUID();
-    if (!existing) {
-      await db
-        .prepare(
-          `INSERT INTO tags (id, user_id, name, normalized_name, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)`
-        )
-        .bind(tagId, userId, name, normalizedName, now, now)
-        .run();
-    }
-
-    await db
-      .prepare("INSERT OR IGNORE INTO memo_tags (memo_id, tag_id, created_at) VALUES (?, ?, ?)")
-      .bind(memoId, tagId, now)
-      .run();
+    statements.push(
+      db.prepare(
+        `INSERT INTO tags (id, user_id, name, normalized_name, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(user_id, normalized_name) DO NOTHING`
+      ).bind(crypto.randomUUID(), userId, name, normalizedName, now, now),
+      db.prepare(
+        `INSERT INTO memo_tags (memo_id, tag_id, created_at)
+         SELECT ?, id, ? FROM tags WHERE user_id = ? AND normalized_name = ?`
+      ).bind(memoId, now, userId, normalizedName)
+    );
   }
+  return statements;
 }
 
 /**
@@ -360,14 +349,13 @@ export async function getMemo(db: Db, userId: string, memoId: string): Promise<M
 export async function createMemo(db: Db, userId: string, content: string): Promise<Memo> {
   const now = nowIso();
   const id = crypto.randomUUID();
-  await db
-    .prepare(
+  await db.batch([
+    db.prepare(
       `INSERT INTO memos (id, user_id, content, pinned, archived_at, created_at, updated_at)
        VALUES (?, ?, ?, 0, NULL, ?, ?)`
-    )
-    .bind(id, userId, content, now, now)
-    .run();
-  await syncMemoTags(db, userId, id, content);
+    ).bind(id, userId, content, now, now),
+    ...prepareMemoTagSync(db, userId, id, content, now)
+  ]);
   const memo = await getMemo(db, userId, id);
   if (!memo) {
     throw new Error("创建 memo 失败");
@@ -382,7 +370,7 @@ export async function updateMemo(
   db: Db,
   userId: string,
   memoId: string,
-  updates: { content?: string; pinned?: boolean; archived?: boolean }
+  updates: UpdateMemoRequest
 ): Promise<Memo | null> {
   const existing = await getMemo(db, userId, memoId);
   if (!existing) {
@@ -390,21 +378,28 @@ export async function updateMemo(
   }
 
   const now = nowIso();
-  const content = updates.content ?? existing.content;
-  const pinned = typeof updates.pinned === "boolean" ? updates.pinned : existing.pinned;
-  let archivedAt = existing.archivedAt;
-  if (typeof updates.archived === "boolean") {
-    archivedAt = updates.archived ? existing.archivedAt ?? now : null;
-  }
-
-  await db
-    .prepare("UPDATE memos SET content = ?, pinned = ?, archived_at = ?, updated_at = ? WHERE id = ? AND user_id = ?")
-    .bind(content, pinned ? 1 : 0, archivedAt, now, memoId, userId)
-    .run();
-
+  const fields = ["updated_at = ?"];
+  const values: (string | number | null)[] = [now];
   if (typeof updates.content === "string") {
-    await syncMemoTags(db, userId, memoId, content);
+    fields.push("content = ?");
+    values.push(updates.content);
   }
+  if (typeof updates.pinned === "boolean") {
+    fields.push("pinned = ?");
+    values.push(updates.pinned ? 1 : 0);
+  }
+  if (typeof updates.archived === "boolean") {
+    fields.push(updates.archived ? "archived_at = COALESCE(archived_at, ?)" : "archived_at = NULL");
+    if (updates.archived) {
+      values.push(now);
+    }
+  }
+
+  await db.batch([
+    db.prepare(`UPDATE memos SET ${fields.join(", ")} WHERE id = ? AND user_id = ?`)
+      .bind(...values, memoId, userId),
+    ...(typeof updates.content === "string" ? prepareMemoTagSync(db, userId, memoId, updates.content, now) : [])
+  ]);
 
   return getMemo(db, userId, memoId);
 }

@@ -1,3 +1,4 @@
+import type { LoginRequest, RegisterRequest, UpdateProfileRequest } from "@flowmemo/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -21,7 +22,7 @@ export function useLogin() {
   const navigate = useNavigate();
 
   return useMutation({
-    mutationFn: (payload: { account: string; password: string }) => api.login(payload.account, payload.password),
+    mutationFn: (payload: LoginRequest) => api.login(payload.account, payload.password),
     onSuccess: (data) => {
       saveSessionToken(data.sessionToken);
       queryClient.setQueryData(["auth", "me"], data);
@@ -41,7 +42,7 @@ export function useRegister() {
   const navigate = useNavigate();
 
   return useMutation({
-    mutationFn: (payload: { account: string; password: string; inviteCode: string }) =>
+    mutationFn: (payload: RegisterRequest) =>
       api.register(payload.account, payload.password, payload.inviteCode),
     onSuccess: (data) => {
       saveSessionToken(data.sessionToken);
@@ -78,7 +79,7 @@ export function useUpdateProfile() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: { nickname: string }) => api.updateProfile(payload.nickname),
+    mutationFn: (payload: UpdateProfileRequest) => api.updateProfile(payload.nickname),
     onSuccess: (data) => {
       queryClient.setQueryData(["auth", "me"], data);
       toast.success("昵称已更新");

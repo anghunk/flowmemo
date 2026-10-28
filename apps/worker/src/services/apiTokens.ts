@@ -90,14 +90,14 @@ export function normalizeApiTokenName(name: unknown): string {
 }
 
 /**
- * 生成可展示一次的原始 API token。
+ * 生成高熵的原始 API Token。
  */
 function createApiTokenValue(): string {
   return `${API_TOKEN_PREFIX}${createToken(32)}`;
 }
 
 /**
- * 生成当前用户 API token，并仅返回一次原始 token。
+ * 生成当前用户 API Token，哈希用于认证，明文供设置页再次复制。
  */
 export async function createApiToken(
   db: Db,

@@ -85,7 +85,7 @@ function splitMarkdownImages(value: string): { text: string; images: EditorImage
 }
 
 /**
- * 完整 memo 编辑器，包含输入、工具栏、emoji、图片上传和拖拽。
+ * 完整 memo 编辑器，包含输入、工具栏、emoji，以及图片选择、粘贴和拖拽上传。
  */
 export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function MemoEditor(
   {
@@ -115,6 +115,7 @@ export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const editorRef = useRef<MemoRichEditorHandle>(null);
   const imagesRef = useRef<EditorImage[]>(initialContent.current.images);
+  const imageUploadingRef = useRef(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const emojiToolRef = useRef<HTMLDivElement>(null);
   const tags = useTags();
@@ -171,8 +172,7 @@ export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function
             );
           })
           .catch(() => {
-            setImages((current) => current.filter((item) => item.id !== image.id));
-            toast.error("图片预览加载失败");
+            toast.error("图片预览加载失败，原附件已保留，可稍后重试");
           });
       }
     });
@@ -370,7 +370,8 @@ export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function
       return;
     }
 
-    if (imageUploading) {
+    if (imageUploadingRef.current) {
+      toast.error("图片正在上传，请稍后再试");
       return;
     }
 
@@ -403,6 +404,7 @@ export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function
       return;
     }
 
+    imageUploadingRef.current = true;
     setImageUploading(true);
     const uploadedImages: EditorImage[] = [];
     let failedCount = 0;
@@ -434,6 +436,7 @@ export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function
     } catch (error) {
       toast.error(error instanceof ApiError ? error.message : "图片上传失败");
     } finally {
+      imageUploadingRef.current = false;
       setImageUploading(false);
     }
   }
@@ -581,13 +584,17 @@ export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function
   function handleEditorKeyDown(event: KeyboardEvent<HTMLDivElement>) {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
+      if (imageUploadingRef.current) {
+        toast.error("图片上传中，请稍后保存");
+        return;
+      }
       onSubmit?.();
     }
   }
 
   const expanded = forceExpanded || focused || content.length > 0 || images.length > 0;
   const submitImageCount = countMemoImages(buildSubmitContent());
-  const canSubmit = Boolean(content.trim() || images.length > 0) && submitImageCount <= MEMO_IMAGE_MAX_COUNT;
+  const canSubmit = !imageUploading && Boolean(content.trim() || images.length > 0) && submitImageCount <= MEMO_IMAGE_MAX_COUNT;
   const canAddMoreImages = canUploadImages && images.length < MEMO_IMAGE_MAX_COUNT;
 
   return (
@@ -608,6 +615,9 @@ export const MemoEditor = forwardRef<MemoEditorHandle, MemoEditorProps>(function
           ariaLabel={ariaLabel}
           autoFocus={autoFocus}
           onChange={setContent}
+          onPasteImages={(files) => {
+            void uploadImageFiles(files);
+          }}
           onKeyDown={handleEditorKeyDown}
           onFocus={() => {
             setFocused(true);

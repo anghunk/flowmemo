@@ -6,7 +6,6 @@ export type Bindings = {
   APP_ENV: string;
   WEB_ORIGIN: string;
   COOKIE_DOMAIN: string;
-  PUBLIC_IMAGE_BASE_URL?: string;
   ADMIN_USER_IDS?: string;
   DEFAULT_ADMIN_ACCOUNT?: string;
   DEFAULT_ADMIN_PASSWORD?: string;

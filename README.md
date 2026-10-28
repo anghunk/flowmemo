@@ -67,7 +67,6 @@ name = "你的-worker-name"
 APP_ENV = "production"
 WEB_ORIGIN = "https://你的前端域名"
 COOKIE_DOMAIN = ""
-PUBLIC_IMAGE_BASE_URL = ""
 ADMIN_USER_IDS = ""
 
 [[d1_databases]]
@@ -90,7 +89,7 @@ bucket_name = "你的-R2-bucket"
 
 `WEB_ORIGIN` 必填。前端有多个域名时用英文逗号分隔，例如 `https://app.example.com,https://www.example.com`。
 `COOKIE_DOMAIN` 通常可留空；如果前后端共享顶级域名并需要跨子域 Cookie，再填写类似 `.example.com`。
-`PUBLIC_IMAGE_BASE_URL` 可留空，留空时图片会走 Worker 的 `/api/uploads` 代理地址。
+图片始终经过 Worker 的 `/api/uploads` 鉴权代理，不再使用 `PUBLIC_IMAGE_BASE_URL` 生成公开 CDN 地址。升级已有部署时，先备份并检查历史笔记；若正文保存了旧 CDN 图片地址，需保留原对象 key，将对应地址迁移为 `Worker 地址/api/uploads/对象 key` 并验证可读，再关闭 R2 bucket 的公共访问及绕过 Worker 的 CDN 路由，清理旧公共缓存。不要批量替换笔记中其他来源的外部图片；已经公开分发的图片副本无法通过应用撤回。
 `ADMIN_USER_IDS` 可先留空，首个管理员创建方式见后文。
 
 <img width="748" height="498" alt="image" src="https://github.com/user-attachments/assets/9346d3b2-7d6d-40af-b56e-c63048b157a8" />
@@ -239,3 +238,12 @@ pnpm --filter @flowmemo/worker db:migrate:local
 - Cloudflare Pages 的生产 Vite 变量在网页控制台手动填写；Worker 部署使用本地 `wrangler.toml`
 - 如果真实密钥或密码曾经进入 Git 历史，开源前请先轮换相关凭据，并清理 Git 历史
 - 生产环境建议使用强密码，并在部署后尽快确认 `WEB_ORIGIN`、`COOKIE_DOMAIN` 和自定义域名配置是否匹配
+
+## API 请求与权限
+
+- JSON 写接口要求 `Content-Type: application/json` 和对象请求体。非法类型、枚举、日期或分页参数统一返回 HTTP 400 与 `{ "error": "中文错误信息" }`。
+- 分页 `limit` / `pageSize` 范围为 1–50，`page` 范围为 1–1000000；兼容 `page_size`、`label`、`labels` 等已有别名。
+- 使用 Cookie 的写请求必须携带受信任的 `Origin`（`WEB_ORIGIN` 白名单或 Worker 同源）。脚本、移动客户端等无页面来源的调用方应使用 Bearer 会话；个人 API Token 仅允许读取笔记及其权限范围内的图片。
+- 指定标签的 API Token 最多配置 50 个标签；多标签查询仍要求笔记同时包含所有指定标签。
+- 图片响应使用 `private, no-store`，每次请求重新鉴权；取消公开后，新的匿名请求立即失去访问权限。
+- 修改笔记正文与标签关系通过同一次 D1 batch 原子写入，失败时共同回滚。

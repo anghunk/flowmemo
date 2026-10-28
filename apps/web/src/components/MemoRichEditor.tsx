@@ -21,6 +21,7 @@ type MemoRichEditorProps = {
   ariaLabel?: string;
   autoFocus?: boolean;
   onChange: (value: string) => void;
+  onPasteImages?: (files: File[]) => void;
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
   onFocus?: (event: FocusEvent<HTMLDivElement>) => void;
   onBlur?: (event: FocusEvent<HTMLDivElement>) => void;
@@ -58,6 +59,7 @@ export const MemoRichEditor = forwardRef<MemoRichEditorHandle, MemoRichEditorPro
     ariaLabel = "memo 输入框",
     autoFocus = false,
     onChange,
+    onPasteImages,
     onKeyDown,
     onFocus,
     onBlur
@@ -447,11 +449,26 @@ export const MemoRichEditor = forwardRef<MemoRichEditorHandle, MemoRichEditorPro
   }
 
   /**
-   * 粘贴时只接收纯文本，避免外部富文本污染编辑器 DOM。
+   * 将剪贴板图片交给附件上传，其余内容只插入纯文本，避免外部 HTML 进入编辑器。
    */
   function handlePaste(event: ClipboardEvent<HTMLDivElement>) {
     event.preventDefault();
-    replaceSelection(event.clipboardData.getData("text/plain"));
+    const imageItems = Array.from(event.clipboardData.items)
+      .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+      .map((item) => item.getAsFile())
+      .filter((file): file is File => file !== null);
+    const imageFiles = imageItems.length > 0
+      ? imageItems
+      : Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+    const text = event.clipboardData.getData("text/plain");
+
+    // 仅粘贴图片时保留当前选区里的文字，混合内容则同时保留文字和图片。
+    if (text) {
+      replaceSelection(text);
+    }
+    if (imageFiles.length > 0) {
+      onPasteImages?.(imageFiles);
+    }
   }
 
   function handleEditorKeyDown(event: KeyboardEvent<HTMLDivElement>) {
